@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Participant, CertificateTemplateConfig } from '../types';
 import { downloadCertificatePdf, previewCertificatePdf, generateCertificatePdfBytes } from '../utils/pdfGenerator';
 import { exportParticipantsToCSV, parseCSVToParticipants } from '../utils/csvHelper';
+import { sendCertificateEmail, sendBulkCertificateEmails, EmailConfig } from '../utils/emailHelper';
 import JSZip from 'jszip';
 import {
   Search,
@@ -19,7 +20,10 @@ import {
   School,
   CheckCircle2,
   Plus,
-  RefreshCw
+  RefreshCw,
+  Send,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { OLD_DISTRICTS, DESIGNATIONS } from '../data/formOptions';
 
@@ -33,6 +37,8 @@ interface DashboardPageProps {
   onOpenEditModal: (participant: Participant) => void;
   onNavigateToForm: () => void;
   onOpenSyncModal: () => void;
+  emailConfig: EmailConfig | null;
+  onOpenEmailSettings: () => void;
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({
@@ -45,6 +51,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onOpenEditModal,
   onNavigateToForm,
   onOpenSyncModal,
+  emailConfig,
+  onOpenEmailSettings,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDistrict, setSelectedDistrict] = useState<string>('all');
@@ -54,6 +62,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const [zipProgress, setZipProgress] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewParticipant, setPreviewParticipant] = useState<Participant | null>(null);
+  const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
+  const [isSendingBulk, setIsSendingBulk] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ sent: 0, total: 0 });
+  const [bulkResult, setBulkResult] = useState<{ sent: number; failed: number; errors: string[] } | null>(null);
 
   // Filtered List
   const filteredParticipants = participants.filter((p) => {
@@ -131,6 +143,70 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     }
   };
 
+  // Send single certificate email
+  const handleSendEmail = async (participant: Participant) => {
+    if (!emailConfig) {
+      onOpenEmailSettings();
+      return;
+    }
+    if (!participant.email) {
+      alert(`${participant.fullName} has no email address.`);
+      return;
+    }
+
+    setSendingEmailId(participant.id);
+    try {
+      const result = await sendCertificateEmail(participant, templateConfig, emailConfig);
+      if (result.success) {
+        alert(`Certificate sent to ${participant.email}`);
+      } else {
+        alert(`Failed to send: ${result.error}`);
+      }
+    } catch (e) {
+      alert('Error sending email.');
+    } finally {
+      setSendingEmailId(null);
+    }
+  };
+
+  // Send all certificates emails
+  const handleSendAllEmails = async () => {
+    if (!emailConfig) {
+      onOpenEmailSettings();
+      return;
+    }
+
+    const participantsWithEmail = filteredParticipants.filter(p => p.email);
+    if (participantsWithEmail.length === 0) {
+      alert('No participants with email addresses found.');
+      return;
+    }
+
+    if (!confirm(`Send certificates to ${participantsWithEmail.length} participant(s)?`)) {
+      return;
+    }
+
+    setIsSendingBulk(true);
+    setBulkProgress({ sent: 0, total: participantsWithEmail.length });
+    setBulkResult(null);
+
+    try {
+      const result = await sendBulkCertificateEmails(
+        participantsWithEmail,
+        templateConfig,
+        emailConfig,
+        (sent, total) => setBulkProgress({ sent, total })
+      );
+      setBulkResult(result);
+      alert(`Done! Sent: ${result.sent}, Failed: ${result.failed}`);
+    } catch (e) {
+      alert('Error sending bulk emails.');
+    } finally {
+      setIsSendingBulk(false);
+      setBulkProgress({ sent: 0, total: 0 });
+    }
+  };
+
   // CSV Import
   const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -174,6 +250,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </button>
 
           <button
+            onClick={onOpenEmailSettings}
+            className="flex items-center space-x-1.5 px-3.5 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold shadow-2xs"
+          >
+            <Send className="w-3.5 h-3.5 text-blue-600" />
+            <span>Email Settings</span>
+          </button>
+
+          <button
             onClick={onNavigateToForm}
             className="flex items-center space-x-1.5 px-3.5 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold shadow-2xs"
           >
@@ -202,6 +286,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           >
             <Archive className="w-3.5 h-3.5 text-emerald-400" />
             <span>{isZipping ? `Archiving (${zipProgress}%)...` : 'Download All (ZIP)'}</span>
+          </button>
+
+          <button
+            onClick={handleSendAllEmails}
+            disabled={isSendingBulk || filteredParticipants.filter(p => p.email).length === 0}
+            className="flex items-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-md transition-colors disabled:opacity-60"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>{isSendingBulk ? `Sending (${bulkProgress.sent}/${bulkProgress.total})...` : 'Send All Emails'}</span>
           </button>
 
           {participants.length > 0 && (
@@ -369,6 +462,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     {/* Action Buttons */}
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end space-x-1.5">
+                        {/* Send Email */}
+                        <button
+                          onClick={() => handleSendEmail(participant)}
+                          disabled={sendingEmailId === participant.id || !participant.email}
+                          title={participant.email ? 'Send Certificate via Email' : 'No email address'}
+                          className="flex items-center space-x-1 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-[11px] shadow-2xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          <span>{sendingEmailId === participant.id ? '...' : 'Email'}</span>
+                        </button>
+
                         {/* Download Certificate */}
                         <button
                           onClick={() => handleDownloadCert(participant)}
@@ -446,6 +550,73 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </div>
             </div>
             <iframe src={previewUrl} className="flex-1 w-full h-full border-none" title="Certificate Preview" />
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Email Progress Modal */}
+      {isSendingBulk && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-900">Sending Certificates</h3>
+              <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+            </div>
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span>Progress</span>
+                  <span className="font-mono">{bulkProgress.sent} / {bulkProgress.total}</span>
+                </div>
+                <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-600 transition-all duration-300"
+                    style={{ width: `${bulkProgress.total > 0 ? (bulkProgress.sent / bulkProgress.total) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+              <p className="text-sm text-slate-500 text-center">Please wait, sending emails...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Email Result Modal */}
+      {bulkResult && !isSendingBulk && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-900">Email Results</h3>
+              <button
+                onClick={() => setBulkResult(null)}
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500"
+              >
+                <AlertCircle className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-2 mb-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Sent Successfully</span>
+                <span className="font-bold text-emerald-600">{bulkResult.sent}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Failed</span>
+                <span className="font-bold text-red-600">{bulkResult.failed}</span>
+              </div>
+            </div>
+            {bulkResult.errors.length > 0 && (
+              <div className="max-h-40 overflow-y-auto text-xs text-red-600 bg-red-50 p-3 rounded-lg space-y-1">
+                {bulkResult.errors.map((err, i) => (
+                  <div key={i}>• {err}</div>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => setBulkResult(null)}
+              className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

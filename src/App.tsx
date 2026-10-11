@@ -6,7 +6,9 @@ import { DashboardPage } from './components/DashboardPage';
 import { GoogleFormHookModal } from './components/GoogleFormHookModal';
 import { EditParticipantModal } from './components/EditParticipantModal';
 import { GoogleSyncModal } from './components/GoogleSyncModal';
+import { EmailSettingsModal } from './components/EmailSettingsModal';
 import { Participant, CertificateTemplateConfig, GoogleFormConfig } from './types';
+import { EmailConfig } from './utils/emailHelper';
 import {
   getStoredParticipants,
   saveStoredParticipants,
@@ -29,9 +31,18 @@ export const App: React.FC = () => {
   const [templateConfig, setTemplateConfig] = useState<CertificateTemplateConfig>(getStoredTemplateConfig);
   const [googleFormConfig, setGoogleFormConfig] = useState<GoogleFormConfig>(getStoredGoogleFormConfig);
   const [syncSettings, setSyncSettings] = useState<GoogleSyncSettings>(getStoredSyncSettings);
+  const [emailConfig, setEmailConfig] = useState<EmailConfig | null>(() => {
+    try {
+      const stored = localStorage.getItem('certify_email_config');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
   
   const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [isEmailSettingsOpen, setIsEmailSettingsOpen] = useState(false);
   const [editingParticipant, setEditingParticipant] = useState<Participant | null>(null);
 
   // Sync state changes to storage
@@ -176,6 +187,8 @@ export const App: React.FC = () => {
             onOpenEditModal={(p) => setEditingParticipant(p)}
             onNavigateToForm={() => setActiveTab('form')}
             onOpenSyncModal={() => setIsSyncModalOpen(true)}
+            emailConfig={emailConfig}
+            onOpenEmailSettings={() => setIsEmailSettingsOpen(true)}
           />
         )}
       </main>
@@ -209,6 +222,12 @@ export const App: React.FC = () => {
         participant={editingParticipant}
         onClose={() => setEditingParticipant(null)}
         onSave={handleUpdateParticipant}
+      />
+
+      {/* Email Settings Modal */}
+      <EmailSettingsModal
+        isOpen={isEmailSettingsOpen}
+        onClose={() => setIsEmailSettingsOpen(false)}
       />
     </div>
   );

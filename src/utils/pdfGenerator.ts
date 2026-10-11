@@ -95,7 +95,7 @@ export async function downloadCertificatePdf(
   config: CertificateTemplateConfig
 ): Promise<void> {
   const pdfBytes = await generateCertificatePdfBytes(participant, config);
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+  const blob = new Blob([pdfBytes as unknown as Uint8Array<ArrayBuffer>], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const cleanName = participant.fullName.replace(/[^a-zA-Z0-9_-]/g, '_');
   const a = document.createElement('a');
@@ -112,6 +112,6 @@ export async function previewCertificatePdf(
   config: CertificateTemplateConfig
 ): Promise<string> {
   const pdfBytes = await generateCertificatePdfBytes(participant, config);
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+  const blob = new Blob([pdfBytes as unknown as Uint8Array<ArrayBuffer>], { type: 'application/pdf' });
   return URL.createObjectURL(blob);
 }

@@ -81,19 +81,19 @@ export const DEFAULT_TEMPLATE_CONFIG: CertificateTemplateConfig = {
 
 export const DEFAULT_GOOGLE_FORM_CONFIG: GoogleFormConfig = {
   formId: '1Yk2IJgES1-h-ItqcoDrtNHCjuVDOpsRzaAjhSU-MbDw',
-  formActionUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSc.../formResponse',
-  enabled: false,
+  formActionUrl: 'https://docs.google.com/forms/d/1Yk2IJgES1-h-ItqcoDrtNHCjuVDOpsRzaAjhSU-MbDw/formResponse',
+  enabled: true,
   fieldMappings: {
-    oldDistrict: 'entry.1000001',
-    programmeLocation: 'entry.1000002',
-    fullName: 'entry.1000003',
-    gender: 'entry.1000004',
-    designation: 'entry.1000005',
-    phone: 'entry.1000006',
-    email: 'entry.1000007',
-    schoolName: 'entry.1000008',
-    schoolAddress: 'entry.1000009',
-    schoolType: 'entry.1000010'
+    oldDistrict: 'entry.1890913358',
+    programmeLocation: 'entry.1711921599',
+    fullName: 'entry.1289053433',
+    gender: 'entry.924388827',
+    designation: 'entry.187015370',
+    phone: 'entry.431399210',
+    email: 'entry.1686334740',
+    schoolName: 'entry.1677345138',
+    schoolAddress: 'entry.384735814',
+    schoolType: 'entry.68126755'
   }
 };
 
@@ -144,7 +144,20 @@ export const getStoredGoogleFormConfig = (): GoogleFormConfig => {
   try {
     const raw = localStorage.getItem(GOOGLE_FORM_KEY);
     if (!raw) return DEFAULT_GOOGLE_FORM_CONFIG;
-    return { ...DEFAULT_GOOGLE_FORM_CONFIG, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    // If stored config still has dummy 100000x values, replace with the verified stone IDs
+    if (parsed.fieldMappings && parsed.fieldMappings.oldDistrict === 'entry.1000001') {
+      localStorage.setItem(GOOGLE_FORM_KEY, JSON.stringify(DEFAULT_GOOGLE_FORM_CONFIG));
+      return DEFAULT_GOOGLE_FORM_CONFIG;
+    }
+    return {
+      ...DEFAULT_GOOGLE_FORM_CONFIG,
+      ...parsed,
+      fieldMappings: {
+        ...DEFAULT_GOOGLE_FORM_CONFIG.fieldMappings,
+        ...(parsed.fieldMappings || {})
+      }
+    };
   } catch (err) {
     console.error('Failed to parse Google Form config:', err);
     return DEFAULT_GOOGLE_FORM_CONFIG;

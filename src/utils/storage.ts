@@ -11,8 +11,8 @@ export const DEFAULT_TEMPLATE_CONFIG: CertificateTemplateConfig = {
   pageHeight: 595, // A4 Landscape height in pt (approx)
   nameField: {
     x: 50, // 50% horizontally centered
-    y: 48, // 48% vertically from top
-    fontSize: 26,
+    y: 58, // 58% vertically from top
+    fontSize: 14, // 14pt
     fontFamily: 'Helvetica-Bold',
     color: '#1e293b',
     isUppercase: true,
@@ -129,7 +129,23 @@ export const getStoredTemplateConfig = (): CertificateTemplateConfig => {
   try {
     const raw = localStorage.getItem(TEMPLATE_KEY);
     if (!raw) return DEFAULT_TEMPLATE_CONFIG;
-    return { ...DEFAULT_TEMPLATE_CONFIG, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    // If stored config still has the old default fontSize 26 or y 48, update to new default
+    if (parsed.nameField && (parsed.nameField.fontSize === 26 || parsed.nameField.y === 48)) {
+      const updated = {
+        ...DEFAULT_TEMPLATE_CONFIG,
+        ...parsed,
+        nameField: {
+          ...parsed.nameField,
+          x: 50,
+          y: 58,
+          fontSize: 14
+        }
+      };
+      localStorage.setItem(TEMPLATE_KEY, JSON.stringify(updated));
+      return updated;
+    }
+    return { ...DEFAULT_TEMPLATE_CONFIG, ...parsed };
   } catch (err) {
     console.error('Failed to parse template config:', err);
     return DEFAULT_TEMPLATE_CONFIG;

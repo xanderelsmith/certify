@@ -272,7 +272,7 @@ export const CertificateDesignerPage: React.FC<CertificateDesignerPageProps> = (
                 </div>
                 <input
                   type="range"
-                  min="14"
+                  min="10"
                   max="48"
                   value={currentConfig.nameField.fontSize}
                   onChange={(e) =>
@@ -411,6 +411,28 @@ export const CertificateDesignerPage: React.FC<CertificateDesignerPageProps> = (
                     className="w-full accent-emerald-600 cursor-pointer"
                   />
                 </div>
+              </div>
+
+              {/* Quick Preset Button */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCurrentConfig(prev => ({
+                      ...prev,
+                      nameField: {
+                        ...prev.nameField,
+                        x: 50,
+                        y: 58,
+                        fontSize: 14
+                      }
+                    }))
+                  }
+                  className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors flex items-center justify-center space-x-1.5"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Apply Default Preset (X: 50%, Y: 58%, 14pt)</span>
+                </button>
               </div>
             </div>
           </div>

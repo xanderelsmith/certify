@@ -1,13 +1,36 @@
 import { Participant } from '../types';
 
 export const exportParticipantsToCSV = (participants: Participant[]): void => {
-  const headers = ['Full Name', 'Email', 'Certificate ID', 'Registration Date'];
+  const headers = [
+    'ID',
+    'Full Name',
+    'Old District',
+    'Programme Location',
+    'Gender',
+    'Designation',
+    'Phone',
+    'Email',
+    'School Name',
+    'School Address',
+    'School Type',
+    'Registration Date',
+    'Certificate ID'
+  ];
 
   const rows = participants.map(p => [
+    `"${p.id || ''}"`,
     `"${(p.fullName || '').replace(/"/g, '""')}"`,
-    `"${(p.email || '').replace(/"/g, '""')}"`,
-    `"${p.certId || ''}"`,
-    `"${p.registrationDate || ''}"`
+    `"${(p.oldDistrict || '').replace(/"/g, '""')}"`,
+    `"${(p.programmeLocation || '').replace(/"/g, '""')}"`,
+    `"${p.gender || ''}"`,
+    `"${(p.designation || '').replace(/"/g, '""')}"`,
+    `"${p.phone || ''}"`,
+    `"${p.email || ''}"`,
+    `"${(p.schoolName || '').replace(/"/g, '""')}"`,
+    `"${(p.schoolAddress || '').replace(/"/g, '""')}"`,
+    `"${(p.schoolType || '').replace(/"/g, '""')}"`,
+    `"${p.registrationDate || ''}"`,
+    `"${p.certId || ''}"`
   ]);
 
   const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
@@ -20,112 +43,67 @@ export const exportParticipantsToCSV = (participants: Participant[]): void => {
   document.body.removeChild(link);
 };
 
-// Robust CSV row splitter that handles quoted commas, quotes, and tabs
-function parseCsvRow(rowText: string): string[] {
-  // If tab-delimited (common in copy-paste from Excel)
-  if (rowText.includes('\t') && !rowText.includes(',')) {
-    return rowText.split('\t').map(c => c.trim().replace(/^"(.*)"$/, '$1'));
-  }
-
-  const values: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < rowText.length; i++) {
-    const char = rowText[i];
-
-    if (char === '"') {
-      if (inQuotes && rowText[i + 1] === '"') {
-        current += '"';
-        i++; // skip escaped quote
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      values.push(current.trim());
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  values.push(current.trim());
-  return values;
-}
-
 export const parseCSVToParticipants = (csvText: string): Participant[] => {
   const lines = csvText.split(/\r\n|\n/).filter(line => line.trim().length > 0);
   if (lines.length <= 1) return [];
 
-  // Parse header line to dynamically locate columns
-  const headerCols = parseCsvRow(lines[0]).map(h => h.toLowerCase().trim());
+  // Parse header line to locate columns
+  const headerMatch = lines[0].match(/(?:[^\s,"]|"(?:\\.|[^"])*")+/g);
+  if (!headerMatch) return [];
 
-  const findIdx = (keywords: string[]): number => {
-    return headerCols.findIndex(h => keywords.some(k => h === k || h.includes(k)));
+  const headers = headerMatch.map(h => h.replace(/^"(.*)"$/, '$1').trim().toLowerCase());
+
+  const findColIndex = (keywords: string[]): number => {
+    return headers.findIndex(h => keywords.some(k => h.includes(k.toLowerCase())));
   };
 
-  // Specific check for separate Surname vs First Name columns in Excel
-  const surnameIdx = findIdx(['surname', 'last name', 'lastname', 'family name']);
-  const firstNameIdx = findIdx(['first name', 'firstname', 'given name']);
-  const otherNamesIdx = findIdx(['other name', 'other names', 'middle name', 'middlename']);
-  const fullNameIdx = findIdx(['full name', 'fullname', 'participant', 'name of participant', "participant's full name", 'name']);
-  const emailIdx = findIdx(['email', 'email address', 'mail', 'e-mail']);
+  const nameIdx = findColIndex(['full name', 'participant', 'surname', 'name']);
+  const districtIdx = findColIndex(['district', 'old district']);
+  const locationIdx = findColIndex(['programme location', 'location']);
+  const genderIdx = findColIndex(['gender', 'sex']);
+  const designationIdx = findColIndex(['designation', 'role', 'title']);
+  const phoneIdx = findColIndex(['phone', 'whatsapp', 'mobile']);
+  const emailIdx = findColIndex(['email', 'mail']);
+  const schoolNameIdx = findColIndex(['name of your school', 'school name', 'school']);
+  const addressIdx = findColIndex(['address', 'school address']);
+  const schoolTypeIdx = findColIndex(['school type', 'type']);
+  const timestampIdx = findColIndex(['timestamp', 'date', 'time']);
 
   const participants: Participant[] = [];
 
   for (let i = 1; i < lines.length; i++) {
-    const row = parseCsvRow(lines[i]);
-    if (!row || row.length === 0 || row.every(val => !val)) continue;
+    const matches = lines[i].match(/(?:[^\s,"]|"(?:\\.|[^"])*")+/g);
+    if (!matches || matches.length < 2) continue;
 
-    let computedFullName = '';
+    const row = matches.map(val => val.replace(/^"(.*)"$/, '$1').replace(/""/g, '"').trim());
 
-    // If Excel has separate columns for Surname and First Name, COMBINE THEM!
-    if (surnameIdx !== -1 && firstNameIdx !== -1) {
-      const surname = row[surnameIdx] || '';
-      const firstName = row[firstNameIdx] || '';
-      const otherNames = otherNamesIdx !== -1 ? (row[otherNamesIdx] || '') : '';
-      computedFullName = [surname, firstName, otherNames].filter(Boolean).join(' ').trim();
-    } else if (fullNameIdx !== -1 && row[fullNameIdx]) {
-      // If there's a Full Name column, use it directly
-      computedFullName = row[fullNameIdx].trim();
-      // If there is also an additional other names column, append it
-      if (otherNamesIdx !== -1 && row[otherNamesIdx] && !computedFullName.toLowerCase().includes(row[otherNamesIdx].toLowerCase())) {
-        computedFullName = `${computedFullName} ${row[otherNamesIdx]}`.trim();
-      }
-    } else if (surnameIdx !== -1 && row[surnameIdx]) {
-      // If only surname matched, check if next column is first name
-      const surname = row[surnameIdx];
-      const nextCol = row[surnameIdx + 1] || '';
-      computedFullName = nextCol && !nextCol.includes('@') ? `${surname} ${nextCol}`.trim() : surname;
-    } else {
-      // Fallback: search for first non-date, non-email column
-      const nameCand = row.find(val => val && !val.includes('@') && !val.match(/^\d{4}-\d{2}-\d{2}/) && isNaN(Number(val)));
-      computedFullName = nameCand || `PARTICIPANT ${i}`;
-    }
+    const fullName = (nameIdx !== -1 && row[nameIdx] ? row[nameIdx] : row[1] || '').trim();
+    if (!fullName) continue;
 
-    // Email extraction
-    let email = '';
-    if (emailIdx !== -1 && row[emailIdx]) {
-      email = row[emailIdx].trim();
-    } else {
-      const emailCand = row.find(val => val && val.includes('@'));
-      if (emailCand) email = emailCand.trim();
-    }
-
-    if (!computedFullName.trim()) continue;
+    const oldDistrict = (districtIdx !== -1 && row[districtIdx] ? row[districtIdx] : row[2] || 'Old Ikorodu Central').trim();
+    const programmeLocation = (locationIdx !== -1 && row[locationIdx] ? row[locationIdx] : row[3] || 'Sabo - Old IKD Central').trim();
+    const gender = (genderIdx !== -1 && row[genderIdx] ? row[genderIdx] : row[4] || 'Male').trim();
+    const designation = (designationIdx !== -1 && row[designationIdx] ? row[designationIdx] : row[5] || 'Educator').trim();
+    const phone = (phoneIdx !== -1 && row[phoneIdx] ? row[phoneIdx] : row[6] || '').trim();
+    const email = (emailIdx !== -1 && row[emailIdx] ? row[emailIdx] : row[7] || '').trim();
+    const schoolName = (schoolNameIdx !== -1 && row[schoolNameIdx] ? row[schoolNameIdx] : row[8] || 'Educators Academy').trim();
+    const schoolAddress = (addressIdx !== -1 && row[addressIdx] ? row[addressIdx] : row[9] || '').trim();
+    const schoolType = (schoolTypeIdx !== -1 && row[schoolTypeIdx] ? row[schoolTypeIdx] : row[10] || 'Private Secondary').trim();
+    const regDate = (timestampIdx !== -1 && row[timestampIdx] ? row[timestampIdx] : new Date().toISOString().slice(0, 10)).trim();
 
     participants.push({
-      id: `EXCEL-${Date.now().toString().slice(-4)}-${i}`,
-      fullName: computedFullName.trim(), // Keep complete name including surname and first name
-      email: email.trim(),
-      oldDistrict: '',
-      programmeLocation: '',
-      gender: '',
-      designation: '',
-      phone: '',
-      schoolName: '',
-      schoolAddress: '',
-      schoolType: '',
-      registrationDate: new Date().toISOString().slice(0, 10),
+      id: `GF-${Date.now().toString().slice(-4)}-${i}`,
+      fullName: fullName.toUpperCase(),
+      oldDistrict,
+      programmeLocation,
+      gender,
+      designation,
+      phone,
+      email,
+      schoolName,
+      schoolAddress,
+      schoolType,
+      registrationDate: regDate,
       certId: `EDUS25-${1000 + i}`
     });
   }

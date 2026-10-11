@@ -24,7 +24,7 @@ export async function generateCertificatePdfBytes(
       const pdfBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
       pdfDoc = await PDFDocument.load(pdfBytes);
     } else {
-      // Load default PDF from public folder
+      // Load default PDF template from public folder
       const res = await fetch(config.pdfTemplateUrl);
       if (!res.ok) throw new Error('Could not load base PDF template');
       const arrayBuffer = await res.arrayBuffer();
@@ -32,7 +32,6 @@ export async function generateCertificatePdfBytes(
     }
   } catch (err) {
     console.warn('Template fetch failed, creating fallback blank certificate document:', err);
-    // Create fallback blank A4 landscape canvas
     pdfDoc = await PDFDocument.create();
     pdfDoc.addPage([842, 595]);
   }
@@ -60,7 +59,7 @@ export async function generateCertificatePdfBytes(
     }
   };
 
-  // 1. Render Participant Name
+  // ONLY Render Participant Name (all other text/signatures are already baked into the PDF graphic)
   if (config.nameField.enabled) {
     const font = getFont(config.nameField.fontFamily);
     const text = config.nameField.isUppercase
@@ -76,7 +75,7 @@ export async function generateCertificatePdfBytes(
       drawX = drawX - textWidth;
     }
 
-    // In PDF, Y = 0 is at bottom, so convert top-down % to bottom-up points
+    // Convert top-down percentage to bottom-up PDF points
     const drawY = height - (config.nameField.y / 100) * height;
 
     firstPage.drawText(text, {
@@ -86,158 +85,6 @@ export async function generateCertificatePdfBytes(
       font,
       color: hexToRgb(config.nameField.color || '#1e293b'),
     });
-  }
-
-  // 2. Render Designation Field
-  if (config.designationField.enabled && participant.designation) {
-    const font = getFont(config.designationField.fontFamily);
-    const text = config.designationField.isUppercase
-      ? participant.designation.toUpperCase()
-      : participant.designation;
-    const textSize = config.designationField.fontSize;
-    const textWidth = font.widthOfTextAtSize(text, textSize);
-
-    let drawX = (config.designationField.x / 100) * width;
-    if (config.designationField.align === 'center') {
-      drawX = drawX - textWidth / 2;
-    } else if (config.designationField.align === 'right') {
-      drawX = drawX - textWidth;
-    }
-    const drawY = height - (config.designationField.y / 100) * height;
-
-    firstPage.drawText(text, {
-      x: drawX,
-      y: drawY,
-      size: textSize,
-      font,
-      color: hexToRgb(config.designationField.color || '#475569'),
-    });
-  }
-
-  // 3. Render School Name Field
-  if (config.schoolField.enabled && participant.schoolName) {
-    const font = getFont(config.schoolField.fontFamily);
-    const text = config.schoolField.isUppercase
-      ? participant.schoolName.toUpperCase()
-      : participant.schoolName;
-    const textSize = config.schoolField.fontSize;
-    const textWidth = font.widthOfTextAtSize(text, textSize);
-
-    let drawX = (config.schoolField.x / 100) * width;
-    if (config.schoolField.align === 'center') {
-      drawX = drawX - textWidth / 2;
-    } else if (config.schoolField.align === 'right') {
-      drawX = drawX - textWidth;
-    }
-    const drawY = height - (config.schoolField.y / 100) * height;
-
-    firstPage.drawText(text, {
-      x: drawX,
-      y: drawY,
-      size: textSize,
-      font,
-      color: hexToRgb(config.schoolField.color || '#0f766e'),
-    });
-  }
-
-  // 4. Render Date Field
-  if (config.dateField.enabled) {
-    const font = getFont(config.dateField.fontFamily);
-    const text = participant.registrationDate ? `Date: ${participant.registrationDate.slice(0, 10)}` : 'September 2025';
-    const textSize = config.dateField.fontSize;
-    const textWidth = font.widthOfTextAtSize(text, textSize);
-
-    let drawX = (config.dateField.x / 100) * width;
-    if (config.dateField.align === 'center') {
-      drawX = drawX - textWidth / 2;
-    } else if (config.dateField.align === 'right') {
-      drawX = drawX - textWidth;
-    }
-    const drawY = height - (config.dateField.y / 100) * height;
-
-    firstPage.drawText(text, {
-      x: drawX,
-      y: drawY,
-      size: textSize,
-      font,
-      color: hexToRgb(config.dateField.color || '#334155'),
-    });
-  }
-
-  // 5. Render Certificate / Serial ID
-  if (config.certNumberField.enabled) {
-    const font = getFont(config.certNumberField.fontFamily);
-    const text = `Cert ID: ${participant.certId || participant.id || 'EF-2025'}`;
-    const textSize = config.certNumberField.fontSize;
-    const textWidth = font.widthOfTextAtSize(text, textSize);
-
-    let drawX = (config.certNumberField.x / 100) * width;
-    if (config.certNumberField.align === 'center') {
-      drawX = drawX - textWidth / 2;
-    } else if (config.certNumberField.align === 'right') {
-      drawX = drawX - textWidth;
-    }
-    const drawY = height - (config.certNumberField.y / 100) * height;
-
-    firstPage.drawText(text, {
-      x: drawX,
-      y: drawY,
-      size: textSize,
-      font,
-      color: hexToRgb(config.certNumberField.color || '#64748b'),
-    });
-  }
-
-  // 6. Embed Signature 1 Image
-  if (config.signature1.enabled && config.signature1.dataUrl) {
-    try {
-      const isPng = config.signature1.dataUrl.includes('image/png');
-      const base64Data = config.signature1.dataUrl.split(',')[1] || config.signature1.dataUrl;
-      const imgBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-      const embeddedImg = isPng
-        ? await pdfDoc.embedPng(imgBytes)
-        : await pdfDoc.embedJpg(imgBytes);
-
-      const sigWidth = config.signature1.width;
-      const sigHeight = config.signature1.height;
-      const sigCenterX = (config.signature1.x / 100) * width;
-      const sigCenterY = height - (config.signature1.y / 100) * height;
-
-      firstPage.drawImage(embeddedImg, {
-        x: sigCenterX - sigWidth / 2,
-        y: sigCenterY - sigHeight / 2,
-        width: sigWidth,
-        height: sigHeight,
-      });
-    } catch (e) {
-      console.warn('Could not embed Signature 1 image into PDF:', e);
-    }
-  }
-
-  // 7. Embed Signature 2 Image
-  if (config.signature2.enabled && config.signature2.dataUrl) {
-    try {
-      const isPng = config.signature2.dataUrl.includes('image/png');
-      const base64Data = config.signature2.dataUrl.split(',')[1] || config.signature2.dataUrl;
-      const imgBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-      const embeddedImg = isPng
-        ? await pdfDoc.embedPng(imgBytes)
-        : await pdfDoc.embedJpg(imgBytes);
-
-      const sigWidth = config.signature2.width;
-      const sigHeight = config.signature2.height;
-      const sigCenterX = (config.signature2.x / 100) * width;
-      const sigCenterY = height - (config.signature2.y / 100) * height;
-
-      firstPage.drawImage(embeddedImg, {
-        x: sigCenterX - sigWidth / 2,
-        y: sigCenterY - sigHeight / 2,
-        width: sigWidth,
-        height: sigHeight,
-      });
-    } catch (e) {
-      console.warn('Could not embed Signature 2 image into PDF:', e);
-    }
   }
 
   return await pdfDoc.save();
